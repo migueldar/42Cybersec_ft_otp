@@ -12,9 +12,6 @@ import (
 	"io/ioutil"
 )
 
-
-//coger uppercase y lowercase hex key
-
 var (
 	key_aes = [16]byte{226, 97, 2, 136, 60, 123, 178, 35, 125, 144, 94, 0, 12, 164, 58, 23}
 	ipad, opad [64]byte
@@ -38,7 +35,9 @@ func start() bool {
 	gptr, kptr := parser()
 	gFlag , kFlag := *gptr, *kptr
 	if gFlag != "" {
-		return(do_gFlag(gFlag))
+		if !do_gFlag(gFlag) {
+			return false
+		}
 	}
 	if kFlag != "" {
 		if kFlag != "ft_otp.key" {
@@ -51,40 +50,42 @@ func start() bool {
 	return false
 }
 
-//check key size
 func do_gFlag(key string) bool {
-	if !check_gFlag(key) {
-		fmt.Println("Incorrect key: must only contain hexadecimal characters")
+	if (len(key) < 64 || len(key) > 128) {
+		fmt.Println("Key must have between 64 and 128 hex characters")
 		return false
+	}
+	if (len(key) % 2 == 1) {
+		key += "0"
+	}
+	data, err := hex.DecodeString(key)
+	if err != nil {
+		log.Fatal(err)
 	}
 	cipher, err := aes.NewCipher(key_aes[:])
 	if err != nil {
 		log.Fatal(err)
 	}
-	data := make([]byte, 64, 64)
-	fmt.Println(data)
-	data, err = hex.DecodeString(key)
-
+	for len(data) < 64 {
+		data = append(data, 0)
+	}
+	data_encrypted := make([]byte, 64)
+	cipher.Encrypt(data_encrypted, data)
+	cipher.Encrypt(data_encrypted[16:], data[16:])
+	cipher.Encrypt(data_encrypted[32:], data[32:])
+	cipher.Encrypt(data_encrypted[48:], data[48:])
+	err = os.WriteFile("ft_otp.key", data_encrypted, 0600)
 	if err != nil {
 		log.Fatal(err)
 	}
-	cipher.Encrypt(data, data)
-	file, err := os.OpenFile("ft_otp.key", os.O_WRONLY | os.O_CREATE | os.O_TRUNC, 0600)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
-	//fmt.Printf("%T %d", data, data)
-	//byteSlice := make([]byte, 32)
-	//bytesRead, err := file.Read(byteSlice)
 	return false
 }
 
 func hmac_sha1(key, time []byte) [20]byte {
-	xorRes := xorSli(ipad[:], key[:])
+	xorRes := xorSli(ipad[:], key)
 	firstMsg := append(xorRes, time...)
 	firstSha := sha1.Sum(firstMsg)
-	xorRes = xorSli(opad[:], key[:])
+	xorRes = xorSli(opad[:], key)
 	secondMsg := append(xorRes, firstSha[:]...)
 	secondSha := sha1.Sum(secondMsg)
 	return secondSha
@@ -98,18 +99,6 @@ func trunc(shaRes [20]byte) int {
 	return result
 }
 
-//manage len < 64 of key, what if > 128 (hex chars)
-//add 0 at end
-func check_gFlag(gFlag string) bool {
-	for _, v := range gFlag {
-		b := byte(v)
-		if (!((b >= 'a' && b <= 'f') || (b >= '0' && b <= '9') || (b >= 'A' && b <= 'F'))) {
-			return false
-		}
-	}
-	return true
-}
-
 func getKey() []byte {
 	file, err := ioutil.ReadFile("ft_otp.key")
 	if err != nil {
@@ -119,22 +108,21 @@ func getKey() []byte {
 	if err != nil {
 		log.Fatal(err)
 	}
-	var de_file []byte
-	cipher.Decrypt(file, de_file)
+	de_file := make([]byte, 64)
+	cipher.Decrypt(de_file, file)
+	cipher.Decrypt(de_file[16:], file[16:])
+	cipher.Decrypt(de_file[32:], file[32:])
+	cipher.Decrypt(de_file[48:], file[48:])
 	return de_file
 }
 
 func main() {
-	//key := [64]byte{2, 3, 5, 7, 11, 13, 90, 99, 100, 1, 9}
-
 	if !start() {
 		return 
 	}
 	key := getKey()
-
-	fmt.Println(key)
 	unixTime := time.Now().Unix()
-	time := []byte(fmt.Sprint(unixTime))
+	time := []byte(fmt.Sprint(unixTime/30))
 	shaRes := hmac_sha1(key[:], time)
 	result := trunc(shaRes)
 	//append 0 at begin
