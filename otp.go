@@ -16,7 +16,7 @@ var ipad, opad [64]byte
 
 func parser() (*string, *string) {
 	defer flag.Parse()
-	return flag.String("g", "", "recieve file where key is allocated and store in an encrypted file"), 
+	return flag.String("g", "", "recieve key and store in an encrypted file"), 
 	flag.String("k", "", "generate a new key based on the password contained in the file")
 }
 
