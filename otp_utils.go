@@ -5,7 +5,7 @@ func xorSli(sli1, sli2 []byte) []byte {
 	for i, v := range sli1 {
 		ret = append(ret, sli2[i] ^ v)
 	}
-	return sli2
+	return ret
 }
 
 func byte4toint(sli []byte) int{
